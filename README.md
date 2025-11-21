@@ -5,4 +5,13 @@ and the technologies I am passionate about
 
 This is built grounds-up, step by step.
 
-I might document the progress here as well..
+## File Structure
+
+```
+portfolio/
+├── app.py              # Flask backend
+├── templates/
+│   └── index.html   # Frontend
+└── README.md
+
+```

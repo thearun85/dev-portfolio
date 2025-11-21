@@ -2,7 +2,7 @@
 <html lang="en">
 	<head>
 		<meta charset="utf-8">
-		<meta name="viewport" content="width=device-width, initial-scale=1.0"
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
 		<title></title>
 		<style>
 			* {
@@ -86,7 +86,7 @@
 				margin-left: 20px;
 				white-space: pre-wrap;
 			}
-			.error {
+			.result.error {
 				color: #ff6b6b;
 				white-space: pre-wrap;
 			}
@@ -106,6 +106,9 @@
 			}
 			.success {
 				color: #00ffff;
+			}
+			.loading {
+				color: #ffff00;
 			}
 		</style>
 	</head>
@@ -137,13 +140,15 @@
 			const state = {
 				cmdHistory: [],
 				historyIndex: -1,
+				isProcessing: false,
+				projectsCache: null
 			}
 
-			const commands = {
+			const staticCommands = {
 				help: {
 					description: `show available commands`,
 					execute: () => {
-						return `Available commands: 
+						return `\nAvailable commands: 
 															
   help 		- Show this help message
   about		- A brief about me
@@ -157,21 +162,33 @@ tip: use ↑↓ arrows to navigate command  history!`
 					
 				},
 				about : {
-					description: `I am a software developer`,
+					description: `about me`,
 					execute: () => {
-						return `I am a software developer`
+						return `\nAbout ARUN RAGHUNATH
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Engineering Manager | 10+ years IT experience
+
+Currently on a career break, studying computer science fundamentals.
+Building hands-on projects and learning by doing.
+
+Goal: Cloud Architect/ Engineering Manager roles
+Philosophy: Learn by building, understand by reading source code.`;
 					}
 				},
 				skills : {
 					description: `I am a software developer`,
 					execute: () => {
-						return `I am a software developer`
-					}
-				},
-				projects : {
-					description: `I am a software developer`,
-					execute: () => {
-						return `I am a software developer`
+						return `\nTechnical Skills: 
+Core:
+	• Python (Flask)
+	• Docker & Containerization
+	• Git version control
+
+Learning:
+	• System Design
+	• Networking
+	• Go Programming
+	`;
 					}
 				},
 				clear : {
@@ -181,21 +198,47 @@ tip: use ↑↓ arrows to navigate command  history!`
 						return null;
 					}
 				},
+				history : {
+					description: `show command history`,
+					execute: () => {
+						if (state.cmdHistory.length == 0) {
+							return `\nNo commands in history yet.`;
+						}
+						let result = "\nCommand History\n\n";
+						state.cmdHistory.forEach((cmd, index) => {
+							result += `${index +1}. ${cmd}\n`;
+						})
+						return result;
+					}
+				}
 			}
 			const display = document.getElementById("display")
 			const userinput = document.getElementById("command-input")
 
-			function printDisplay(cmd, result, isError=false) {
+			function printDisplay(cmd, result, isError=false, isLoading=false) {
+				if (cmd === null) {
+					return ;
+				}
 				const div = document.createElement('div');
 				div.className = 'display-line';
-				
-				const cmdDiv = document.createElement('div');
-				cmdDiv.className = 'command';
-				cmdDiv.textContent = 'visitor@portfolio:~$ ' + cmd;
-				div.appendChild(cmdDiv);
 
+				if (cmd) {
+					const cmdDiv = document.createElement('div');
+					cmdDiv.className = 'command';
+					cmdDiv.textContent = 'visitor@portfolio:~$ ' + cmd;
+					div.appendChild(cmdDiv);
+				}
+				
+				
 				const resultDiv = document.createElement('div');
-				resultDiv.className = isError ? 'error' : 'result';
+				if (isError) {
+					resultDiv.className = 'result error';
+				} else if (isLoading) {
+					resultDiv.className = 'result loading';
+				} else {
+					resultDiv.className = 'result';
+				}
+				
 				resultDiv.textContent = result;
 				div.appendChild(resultDiv);
 
@@ -207,26 +250,77 @@ tip: use ↑↓ arrows to navigate command  history!`
 				
 			}
 			
-			function processCommand(cmd) {
+			async function processCommand(cmd) {
 				cmd = cmd.trim();
 				if (!cmd) return;
-				state.cmdHistory.push(cmd);
-				state.historyIndex = state.cmdHistory.length;
 
-				if (commands[cmd]) {
-					const result = commands[cmd].execute();
+				if (state.isProcessing) {
+					printDisplay('', 'Please wait for the current command to complete...', true);
+				}
+
+				if (cmd != "history") {
+					state.cmdHistory.push(cmd);
+					state.historyIndex = state.cmdHistory.length;
+				}
+				
+				if (staticCommands[cmd]) {
+					const result = staticCommands[cmd].execute();
 					printDisplay(cmd, result, false);
+			
+				} else if (cmd == "projects") {
+					await fetchProjects(cmd);
+					return;
 				} else {
-					const error = `Command not found: ${cmd}
+					printDisplay(cmd, `Command not found: ${cmd}
 Type 'help' to see available commands!
-					`
-
+										`, true);
 					
-					printDisplay(cmd, error, true);
-					
+				}
+				if (cmd == "history") {
+					state.cmdHistory.push(cmd);
+					state.historyIndex = state.cmdHistory.length;
 				}
 			}
 
+			async function fetchProjects(cmd) {
+				state.isProcessing = true;
+				userinput.disabled = true;
+				try {
+					const response = await fetch ('/api/command', {
+						method: 'POST',
+						headers: {
+							'Content-Type' : 'application/json'
+						},
+						body: JSON.stringify({
+							command: cmd
+						}) 
+					});
+					if (!response.ok) {
+						throw new Error(`HTTP error! status: ${response.status}`);
+					}
+					const data = await response.json();
+					formatted_projects = formatProjects(data);
+					printDisplay(cmd, formatted_projects, false);
+				} catch (error) {
+					
+				} finally {
+					state.isProcessing = false;
+					userinput.disabled = false;
+					userinput.focus();
+				}
+			}
+
+			function formatProjects(data) {
+				let result = `\nMy projects (total ${data.count} )\n\n`;
+				data.projects.forEach((project, index) => {
+					result += `${index +1}. ${project.name}\n`;
+					result += `${project.description}\n`;
+					result += `Tech: ${project.tech.join(', ')}\n`;
+					result += `Github: ${project.github}\n`;
+				})
+				return result;
+			}
+			
 			function navigateHistory(direction) {
 				if (state.cmdHistory.length == 0){
 					return;
@@ -237,7 +331,7 @@ Type 'help' to see available commands!
 						state.historyIndex--;
 						userinput.value = state.cmdHistory[state.historyIndex];
 					}
-				} else if (direction = 'down') {
+				} else if (direction == 'down') {
 					if (state.historyIndex < state.cmdHistory.length -1) {
 						state.historyIndex++;
 						userinput.value = state.cmdHistory[state.historyIndex];
